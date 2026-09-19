@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Traversée à 3 — V1</title>
+<style>
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#111; }
+  body { display:flex; align-items:center; justify-content:center; }
+  canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh, calc(100vw * 9 / 16)); image-rendering:auto; }
+</style>
+</head>
+<body>
+<canvas id="game" width="1920" height="1080"></canvas>
+<script>
+/* ============================================================
+   V1 — PARAMÈTRES À MODIFIER ICI
+   Toutes les distances/vitesses sont exprimées dans l'espace
+   logique 1920 × 1080 du jeu.
+   ============================================================ */
+const CONFIG = {
+  // 0/ Placement des 3 personnages au départ
+  players: {
+    centerX: 960,
+    spacingX: 260,
+    startY: 890,
+
+    // 1/ Distance d'avancement verticale par pression
+    moveStepY: 78,
+
+    // 2/ Durée de l'interpolation vers le nouveau Y (ms)
+    moveDurationMs: 135,
+
+    // 3/ Touches des joueurs
+    keys: ['a', 'g', 'l'],
+  },
+
+  // La plage commence à peu près ici. Un joueur qui atteint
+  // cette altitude est considéré comme arrivé.
+  finishY: 125,
+
+  // 4/ Réglages indépendants des 6 voies.
+  // direction: +1 = vers la droite, -1 = vers la gauche
+  // speedPxPerSec: vitesse des voitures
+  // spawnEveryMs: fréquence moyenne
+  // spawnJitterMs: variation aléatoire autour de cette fréquence
+  lanes: [
+    { y: 190, direction: +1, speedPxPerSec: 235, spawnEveryMs: 1650, spawnJitterMs: 500 },
+    { y: 285, direction: -1, speedPxPerSec: 285, spawnEveryMs: 1500, spawnJitterMs: 450 },
+    { y: 380, direction: +1, speedPxPerSec: 255, spawnEveryMs: 1750, spawnJitterMs: 550 },
+    { y: 475, direction: -1, speedPxPerSec: 310, spawnEveryMs: 1550, spawnJitterMs: 500 },
+    { y: 570, direction: +1, speedPxPerSec: 270, spawnEveryMs: 1700, spawnJitterMs: 500 },
+    { y: 665, direction: -1, speedPxPerSec: 295, spawnEveryMs: 1600, spawnJitterMs: 450 },
+  ],
+
+  // Animations facilement réglables
+  loseAnimation: {
+    squashDurationMs: 260,  // temps pour arriver à la forme "crêpe"
+    holdDurationMs: 220,    // temps passé écrasé
+    respawnDelayMs: 100,    // pause avant réapparition
+    scaleX: 2.0,
+    scaleY: 0.5,
+  },
+
+  winAnimation: {
+    jumpHeightPx: 115,
+    jumpDurationMs: 720,
+  },
+
+  // Décalage vertical du centre des voitures par rapport au Y de voie
+  carYOffset: 0,
+
+  // Affiche les rectangles de collision si true.
+  debugHitboxes: false,
+};
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const assets = {};
+const ASSET_PATHS = {
+  bg: 'assets/bg.png',
+  car1: 'assets/car_01.png',
+  car2: 'assets/car_02.png',
+  car3: 'assets/car_03.png',
+  car4: 'assets/car_04.png',
+  hero1: 'assets/hero_1.png',
+  hero2: 'assets/hero_2.png',
+  hero3: 'assets/hero_3.png',
+};
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function lerp(a,b,t){ return a + (b-a)*t; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function easeOutCubic(t){ return 1 - Math.pow(1-t,3); }
+function easeOutQuad(t){ return 1 - (1-t)*(1-t); }
+function easeInQuad(t){ return t*t; }
+
+// BBoxes mesurées directement d'après les masques fournis :
+// car_coll.png 169x104 => (11,37)-(158,92)
+// hero_coll.png 153x171 => (40,79)-(111,150)
+const CAR_HIT = { x0:11/169, y0:37/104, x1:158/169, y1:92/104 };
+const HERO_HIT = { x0:40/153, y0:79/171, x1:111/153, y1:150/171 };
+
+class Player {
+  constructor(index, img, startX) {
+    this.index = index;
+    this.img = img;
+    this.startX = startX;
+    this.startY = CONFIG.players.startY;
+    this.x = startX;
+    this.y = this.startY;
+    this.fromY = this.y;
+    this.targetY = this.y;
+    this.moveStart = 0;
+    this.moving = false;
+    this.dead = false;
+    this.finished = false;
+    this.loseStart = 0;
+    this.winStart = 0;
+    this.finishOrder = 0;
+  }
+
+  tryMove(now) {
+    if (this.dead || this.finished || this.moving) return;
+    this.fromY = this.y;
+    this.targetY = Math.max(CONFIG.finishY, this.y - CONFIG.players.moveStepY);
+    this.moveStart = now;
+    this.moving = true;
+  }
+
+  hit(now) {
+    if (this.dead || this.finished) return;
+    this.dead = true;
+    this.moving = false;
+    this.loseStart = now;
+  }
+
+  finish(now) {
+    if (this.finished) return;
+    this.finished = true;
+    this.moving = false;
+    this.y = CONFIG.finishY;
+    this.targetY = this.y;
+    this.winStart = now;
+    this.finishOrder = ++gameFinishCount;
+  }
+
+  reset() {
+    this.x = this.startX;
+    this.y = this.startY;
+    this.fromY = this.y;
+    this.targetY = this.y;
+    this.moving = false;
+    this.dead = false;
+  }
+
+  update(now) {
+    if (this.moving) {
+      const t = clamp((now - this.moveStart) / CONFIG.players.moveDurationMs, 0, 1);
+      this.y = lerp(this.fromY, this.targetY, easeOutCubic(t));
+      if (t >= 1) {
+        this.y = this.targetY;
+        this.moving = false;
+        if (this.y <= CONFIG.finishY) this.finish(now);
+      }
+    }
+
+    if (this.dead) {
+      const a = CONFIG.loseAnimation;
+      const total = a.squashDurationMs + a.holdDurationMs + a.respawnDelayMs;
+      if (now - this.loseStart >= total) this.reset();
+    }
+  }
+
+  getDrawTransform(now) {
+    let scaleX = 1, scaleY = 1, offsetY = 0;
+    if (this.dead) {
+      const a = CONFIG.loseAnimation;
+      const t = clamp((now - this.loseStart) / a.squashDurationMs, 0, 1);
+      const e = easeOutCubic(t);
+      scaleX = lerp(1, a.scaleX, e);
+      scaleY = lerp(1, a.scaleY, e);
+    } else if (this.finished) {
+      const a = CONFIG.winAnimation;
+      const t = clamp((now - this.winStart) / a.jumpDurationMs, 0, 1);
+      if (t < 0.5) offsetY = -a.jumpHeightPx * easeOutQuad(t * 2);
+      else offsetY = -a.jumpHeightPx * (1 - easeInQuad((t - 0.5) * 2));
+    }
+    return { scaleX, scaleY, offsetY };
+  }
+
+  hitbox() {
+    const iw = this.img.width, ih = this.img.height;
+    const left = this.x - iw/2 + iw*HERO_HIT.x0;
+    const top  = this.y - ih/2 + ih*HERO_HIT.y0;
+    return {
+      x:left,
+      y:top,
+      w:iw*(HERO_HIT.x1-HERO_HIT.x0),
+      h:ih*(HERO_HIT.y1-HERO_HIT.y0)
+    };
+  }
+
+  draw(now) {
+    const t = this.getDrawTransform(now);
+    ctx.save();
+    ctx.translate(this.x, this.y + t.offsetY);
+    ctx.scale(t.scaleX, t.scaleY);
+    ctx.drawImage(this.img, -this.img.width/2, -this.img.height/2);
+    ctx.restore();
+
+    if (CONFIG.debugHitboxes && !this.dead && !this.finished) {
+      const b=this.hitbox();
+      ctx.save(); ctx.strokeStyle='#ff00ff'; ctx.lineWidth=3; ctx.strokeRect(b.x,b.y,b.w,b.h); ctx.restore();
+    }
+  }
+}
+
+class Car {
+  constructor(laneIndex, img) {
+    this.laneIndex = laneIndex;
+    this.lane = CONFIG.lanes[laneIndex];
+    this.img = img;
+    this.y = this.lane.y + CONFIG.carYOffset;
+    this.x = this.lane.direction > 0 ? -img.width/2 - 10 : W + img.width/2 + 10;
+  }
+  update(dt) {
+    this.x += this.lane.direction * this.lane.speedPxPerSec * dt;
+  }
+  offscreen() {
+    return this.lane.direction > 0 ? this.x > W + this.img.width : this.x < -this.img.width;
+  }
+  hitbox() {
+    const iw=this.img.width, ih=this.img.height;
+    return {
+      x:this.x-iw/2+iw*CAR_HIT.x0,
+      y:this.y-ih/2+ih*CAR_HIT.y0,
+      w:iw*(CAR_HIT.x1-CAR_HIT.x0),
+      h:ih*(CAR_HIT.y1-CAR_HIT.y0)
+    };
+  }
+  draw() {
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    if (this.lane.direction < 0) ctx.scale(-1,1);
+    ctx.drawImage(this.img,-this.img.width/2,-this.img.height/2);
+    ctx.restore();
+    if (CONFIG.debugHitboxes) {
+      const b=this.hitbox();
+      ctx.save(); ctx.strokeStyle='#00ffff'; ctx.lineWidth=3; ctx.strokeRect(b.x,b.y,b.w,b.h); ctx.restore();
+    }
+  }
+}
+
+let players=[];
+let cars=[];
+let laneNextSpawn=[];
+let lastTime=0;
+let gameFinishCount=0;
+const carImages=[];
+
+function rectanglesOverlap(a,b){
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function scheduleNextSpawn(laneIndex, now) {
+  const l=CONFIG.lanes[laneIndex];
+  const jitter=(Math.random()*2-1)*l.spawnJitterMs;
+  laneNextSpawn[laneIndex]=now + Math.max(350,l.spawnEveryMs+jitter);
+}
+
+function spawnCar(laneIndex) {
+  const img=carImages[(Math.random()*carImages.length)|0];
+  cars.push(new Car(laneIndex,img));
+}
+
+function init(now=performance.now()) {
+  gameFinishCount=0;
+  cars=[];
+  players=[];
+  const cx=CONFIG.players.centerX, s=CONFIG.players.spacingX;
+  players.push(new Player(0,assets.hero1,cx-s));
+  players.push(new Player(1,assets.hero2,cx));
+  players.push(new Player(2,assets.hero3,cx+s));
+  laneNextSpawn=CONFIG.lanes.map((_,i)=> now + 300 + Math.random()*900 + i*80);
+  lastTime=now;
+}
+
+function update(now,dt) {
+  players.forEach(p=>p.update(now));
+
+  for(let i=0;i<CONFIG.lanes.length;i++){
+    if(now>=laneNextSpawn[i]){
+      spawnCar(i);
+      scheduleNextSpawn(i,now);
+    }
+  }
+
+  cars.forEach(c=>c.update(dt));
+  cars=cars.filter(c=>!c.offscreen());
+
+  for(const p of players){
+    if(p.dead || p.finished) continue;
+    const pb=p.hitbox();
+    for(const c of cars){
+      if(rectanglesOverlap(pb,c.hitbox())){
+        p.hit(now);
+        break;
+      }
+    }
+  }
+}
+
+function draw(now) {
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(assets.bg,0,0,W,H);
+  cars.forEach(c=>c.draw());
+  players.forEach(p=>p.draw(now));
+
+  // Indication discrète des touches au départ uniquement.
+  ctx.save();
+  ctx.font='bold 34px Arial, sans-serif';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  for(let i=0;i<players.length;i++){
+    const p=players[i];
+    if(!p.finished && Math.abs(p.y-p.startY)<1 && !p.dead){
+      ctx.fillStyle='rgba(255,255,255,.88)';
+      ctx.strokeStyle='rgba(0,0,0,.7)';
+      ctx.lineWidth=7;
+      const label=CONFIG.players.keys[i].toUpperCase();
+      ctx.strokeText(label,p.startX,p.startY+125);
+      ctx.fillText(label,p.startX,p.startY+125);
+    }
+  }
+  ctx.restore();
+}
+
+function loop(now){
+  const dt=Math.min((now-lastTime)/1000,0.05);
+  lastTime=now;
+  update(now,dt);
+  draw(now);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('keydown', (e)=>{
+  if(e.repeat) return;
+  const key=e.key.toLowerCase();
+  const idx=CONFIG.players.keys.findIndex(k=>k.toLowerCase()===key);
+  if(idx>=0){
+    e.preventDefault();
+    players[idx].tryMove(performance.now());
+  }
+  // R = recommencer complètement
+  if(key==='r') init(performance.now());
+});
+
+(async function start(){
+  try {
+    const entries=Object.entries(ASSET_PATHS);
+    const loaded=await Promise.all(entries.map(([,src])=>loadImage(src)));
+    entries.forEach(([k],i)=>assets[k]=loaded[i]);
+    carImages.push(assets.car1,assets.car2,assets.car3,assets.car4);
+    init(performance.now());
+    requestAnimationFrame(loop);
+  } catch(err) {
+    ctx.fillStyle='#fff'; ctx.font='30px sans-serif';
+    ctx.fillText('Erreur de chargement des images.',40,60);
+    console.error(err);
+  }
+})();
+</script>
+</body>
+</html>
