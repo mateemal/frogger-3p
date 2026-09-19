@@ -39,33 +39,35 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
 <body>
 <canvas id="game" width="1920" height="1080"></canvas>
 <div id="controls">
-  <h3>Réglages joueurs</h3>
+  <h3>Collisions</h3>
 
-  <label>Distance Y par pression</label>
+  <label>Héros — largeur</label>
   <div class="row">
-    <input id="moveStepY" type="range" min="20" max="220" step="1">
-    <output id="moveStepYOut"></output>
+    <input id="heroHitW" type="range" min="1" max="100" step="1">
+    <output id="heroHitWOut"></output>
   </div>
 
-  <label>Durée du déplacement</label>
+  <label>Héros — hauteur</label>
   <div class="row">
-    <input id="moveDurationMs" type="range" min="40" max="500" step="5">
-    <output id="moveDurationMsOut"></output>
+    <input id="heroHitH" type="range" min="1" max="100" step="1">
+    <output id="heroHitHOut"></output>
   </div>
 
-  <label>Écartement horizontal</label>
+  <label>Voitures — largeur</label>
   <div class="row">
-    <input id="spacingX" type="range" min="100" max="600" step="5">
-    <output id="spacingXOut"></output>
+    <input id="carHitW" type="range" min="10" max="150" step="1">
+    <output id="carHitWOut"></output>
   </div>
 
-  <label>Position de départ Y</label>
+  <label>Voitures — hauteur</label>
   <div class="row">
-    <input id="startY" type="range" min="700" max="1000" step="5">
-    <output id="startYOut"></output>
+    <input id="carHitH" type="range" min="10" max="150" step="1">
+    <output id="carHitHOut"></output>
   </div>
 
-  <button id="resetBtn">Recommencer</button>
+  <div style="margin-top:10px;font-size:12px;opacity:.85">
+    Magenta = héros · Cyan = voitures
+  </div>
 </div>
 <script>
 const CONFIG = {
@@ -113,27 +115,30 @@ jumpDurationMs: 720,
 },
 // Décalage vertical du centre des voitures par rapport au Y de voie
 carYOffset: 0,
-// Affiche les rectangles de collision si true.
-debugHitboxes: false,
+// Réglages des hitboxes en % du masque de référence.
+heroHitboxScaleX: 3.125,
+heroHitboxScaleY: 3.125,
+carHitboxScaleX: 100,
+carHitboxScaleY: 100,
+// Affiche les rectangles de collision.
+debugHitboxes: true,
 };
-function bindRange(id, obj, key, suffix='') {
+function bindCollisionRange(id, key) {
   const el = document.getElementById(id);
   const out = document.getElementById(id + 'Out');
-  el.value = obj[key];
+  el.value = CONFIG[key];
   const sync = () => {
-    obj[key] = Number(el.value);
-    out.textContent = obj[key] + suffix;
+    CONFIG[key] = Number(el.value);
+    out.textContent = CONFIG[key] + ' %';
   };
   el.addEventListener('input', sync);
   sync();
 }
 
-bindRange('moveStepY', CONFIG.players, 'moveStepY', ' px');
-bindRange('moveDurationMs', CONFIG.players, 'moveDurationMs', ' ms');
-bindRange('spacingX', CONFIG.players, 'spacingX', ' px');
-bindRange('startY', CONFIG.players, 'startY', ' px');
-
-document.getElementById('resetBtn').addEventListener('click', () => resetGame());
+bindCollisionRange('heroHitW', 'heroHitboxScaleX');
+bindCollisionRange('heroHitH', 'heroHitboxScaleY');
+bindCollisionRange('carHitW', 'carHitboxScaleX');
+bindCollisionRange('carHitH', 'carHitboxScaleY');
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -251,8 +256,8 @@ hitbox() {
 const iw = this.img.width, ih = this.img.height;
 const baseW = iw*(HERO_HIT.x1-HERO_HIT.x0);
 const baseH = ih*(HERO_HIT.y1-HERO_HIT.y0);
-const w = baseW / 32;
-const h = baseH / 32;
+const w = baseW * CONFIG.heroHitboxScaleX / 100;
+const h = baseH * CONFIG.heroHitboxScaleY / 100;
 const centerX = this.x - iw/2 + iw*(HERO_HIT.x0 + HERO_HIT.x1)/2;
 const centerY = this.y - ih/2 + ih*(HERO_HIT.y0 + HERO_HIT.y1)/2;
 return {
@@ -291,11 +296,17 @@ return this.lane.direction > 0 ? this.x > W + this.img.width : this.x < -this.im
 }
 hitbox() {
 const iw=this.img.width, ih=this.img.height;
+const baseW = iw*(CAR_HIT.x1-CAR_HIT.x0);
+const baseH = ih*(CAR_HIT.y1-CAR_HIT.y0);
+const w = baseW * CONFIG.carHitboxScaleX / 100;
+const h = baseH * CONFIG.carHitboxScaleY / 100;
+const centerX = this.x - iw/2 + iw*(CAR_HIT.x0 + CAR_HIT.x1)/2;
+const centerY = this.y - ih/2 + ih*(CAR_HIT.y0 + CAR_HIT.y1)/2;
 return {
-x:this.x-iw/2+iw*CAR_HIT.x0,
-y:this.y-ih/2+ih*CAR_HIT.y0,
-w:iw*(CAR_HIT.x1-CAR_HIT.x0),
-h:ih*(CAR_HIT.y1-CAR_HIT.y0)
+x:centerX - w/2,
+y:centerY - h/2,
+w,
+h
 };
 }
 draw() {
