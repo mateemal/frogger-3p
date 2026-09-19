@@ -14,6 +14,8 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
 <canvas id="game" width="1920" height="1080"></canvas>
 <script>
 const CONFIG = {
+// Coupe totalement les voitures pendant les réglages
+carsEnabled: false,
 // 0/ Placement des 3 personnages au départ
 players: {
 centerX: 960,
@@ -245,6 +247,7 @@ const jitter=(Math.random()*2-1)*l.spawnJitterMs;
 laneNextSpawn[laneIndex]=now + Math.max(350,l.spawnEveryMs+jitter);
 }
 function spawnCar(laneIndex) {
+if (!CONFIG.carsEnabled) return;
 const img=carImages[(Math.random()*carImages.length)|0];
 cars.push(new Car(laneIndex,img));
 }
@@ -283,7 +286,7 @@ break;
 function draw(now) {
 ctx.clearRect(0,0,W,H);
 ctx.drawImage(assets.bg,0,0,W,H);
-cars.forEach(c=>c.draw());
+if (CONFIG.carsEnabled) cars.forEach(c=>c.draw());
 players.forEach(p=>p.draw(now));
 // Indication discrète des touches au départ uniquement.
 ctx.save();
