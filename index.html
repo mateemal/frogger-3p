@@ -53,6 +53,12 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
     <output id="heroHitHOut"></output>
   </div>
 
+  <label>Héros — décalage Y</label>
+  <div class="row">
+    <input id="heroHitYOffset" type="range" min="-100" max="100" step="1">
+    <output id="heroHitYOffsetOut"></output>
+  </div>
+
   <label>Voitures — largeur</label>
   <div class="row">
     <input id="carHitW" type="range" min="10" max="150" step="1">
@@ -118,6 +124,7 @@ carYOffset: 0,
 // Réglages des hitboxes en % du masque de référence.
 heroHitboxScaleX: 3.125,
 heroHitboxScaleY: 3.125,
+heroHitboxOffsetY: 0,
 carHitboxScaleX: 100,
 carHitboxScaleY: 100,
 // Affiche les rectangles de collision.
@@ -129,7 +136,7 @@ function bindCollisionRange(id, key) {
   el.value = CONFIG[key];
   const sync = () => {
     CONFIG[key] = Number(el.value);
-    out.textContent = CONFIG[key] + ' %';
+    out.textContent = CONFIG[key] + (key === 'heroHitboxOffsetY' ? ' px' : ' %');
   };
   el.addEventListener('input', sync);
   sync();
@@ -137,6 +144,7 @@ function bindCollisionRange(id, key) {
 
 bindCollisionRange('heroHitW', 'heroHitboxScaleX');
 bindCollisionRange('heroHitH', 'heroHitboxScaleY');
+bindCollisionRange('heroHitYOffset', 'heroHitboxOffsetY');
 bindCollisionRange('carHitW', 'carHitboxScaleX');
 bindCollisionRange('carHitH', 'carHitboxScaleY');
 
@@ -259,7 +267,7 @@ const baseH = ih*(HERO_HIT.y1-HERO_HIT.y0);
 const w = baseW * CONFIG.heroHitboxScaleX / 100;
 const h = baseH * CONFIG.heroHitboxScaleY / 100;
 const centerX = this.x - iw/2 + iw*(HERO_HIT.x0 + HERO_HIT.x1)/2;
-const centerY = this.y - ih/2 + ih*(HERO_HIT.y0 + HERO_HIT.y1)/2;
+const centerY = this.y - ih/2 + ih*(HERO_HIT.y0 + HERO_HIT.y1)/2 + CONFIG.heroHitboxOffsetY;
 return {
 x:centerX - w/2,
 y:centerY - h/2,
