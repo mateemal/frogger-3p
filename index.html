@@ -39,7 +39,15 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
 <body>
 <canvas id="game" width="1920" height="1080"></canvas>
 <div id="controls">
-  <h3>Collisions</h3>
+  <h3>Réglages</h3>
+
+  <label>Déplacement Y par clic</label>
+  <div class="row">
+    <input id="moveStepY" type="range" min="20" max="220" step="1">
+    <output id="moveStepYOut"></output>
+  </div>
+
+  <h3 style="margin-top:14px">Collisions</h3>
 
   <label>Héros — largeur</label>
   <div class="row">
@@ -130,6 +138,20 @@ carHitboxScaleY: 100,
 // Affiche les rectangles de collision.
 debugHitboxes: true,
 };
+function bindPlayerRange(id, key, suffix=' px') {
+  const el = document.getElementById(id);
+  const out = document.getElementById(id + 'Out');
+  el.value = CONFIG.players[key];
+  const sync = () => {
+    CONFIG.players[key] = Number(el.value);
+    out.textContent = CONFIG.players[key] + suffix;
+  };
+  el.addEventListener('input', sync);
+  sync();
+}
+
+bindPlayerRange('moveStepY', 'moveStepY');
+
 function bindCollisionRange(id, key) {
   const el = document.getElementById(id);
   const out = document.getElementById(id + 'Out');
