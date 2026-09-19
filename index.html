@@ -47,6 +47,12 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
     <output id="moveStepYOut"></output>
   </div>
 
+  <label>Vitesse déplacement héros</label>
+  <div class="row">
+    <input id="moveDurationMs" type="range" min="40" max="700" step="5">
+    <output id="moveDurationMsOut"></output>
+  </div>
+
   <h3 style="margin-top:14px">Voitures</h3>
   <div id="laneControls"></div>
 </div>
@@ -75,12 +81,12 @@ finishY: 125,
 // spawnEveryMs: fréquence moyenne
 // spawnJitterMs: variation aléatoire autour de cette fréquence
 lanes: [
-{ y: 190, direction: +1, speedPxPerSec: 235, spawnEveryMs: 4950, spawnJitterMs: 500 },
-{ y: 285, direction: -1, speedPxPerSec: 285, spawnEveryMs: 4500, spawnJitterMs: 450 },
-{ y: 380, direction: +1, speedPxPerSec: 255, spawnEveryMs: 5250, spawnJitterMs: 550 },
-{ y: 475, direction: -1, speedPxPerSec: 310, spawnEveryMs: 4650, spawnJitterMs: 500 },
-{ y: 570, direction: +1, speedPxPerSec: 270, spawnEveryMs: 5100, spawnJitterMs: 500 },
-{ y: 665, direction: -1, speedPxPerSec: 295, spawnEveryMs: 4800, spawnJitterMs: 450 },
+{ y: 190, direction: +1, speedPxPerSec: 470, spawnEveryMs: 1500, spawnJitterMs: 500 },
+{ y: 285, direction: -1, speedPxPerSec: 345, spawnEveryMs: 3600, spawnJitterMs: 450 },
+{ y: 380, direction: +1, speedPxPerSec: 250, spawnEveryMs: 1900, spawnJitterMs: 550 },
+{ y: 475, direction: -1, speedPxPerSec: 240, spawnEveryMs: 2500, spawnJitterMs: 500 },
+{ y: 570, direction: +1, speedPxPerSec: 225, spawnEveryMs: 3400, spawnJitterMs: 500 },
+{ y: 665, direction: -1, speedPxPerSec: 215, spawnEveryMs: 4300, spawnJitterMs: 450 },
 ],
 // Animations facilement réglables
 loseAnimation: {
@@ -118,6 +124,7 @@ function bindPlayerRange(id, key, suffix=' px') {
 }
 
 bindPlayerRange('moveStepY', 'moveStepY');
+bindPlayerRange('moveDurationMs', 'moveDurationMs', ' ms');
 
 const laneControls = document.getElementById('laneControls');
 CONFIG.lanes.forEach((lane, i) => {
