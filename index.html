@@ -47,41 +47,8 @@ canvas { display:block; width:min(100vw, calc(100vh * 16 / 9)); height:min(100vh
     <output id="moveStepYOut"></output>
   </div>
 
-  <h3 style="margin-top:14px">Collisions</h3>
-
-  <label>Héros — largeur</label>
-  <div class="row">
-    <input id="heroHitW" type="range" min="1" max="100" step="1">
-    <output id="heroHitWOut"></output>
-  </div>
-
-  <label>Héros — hauteur</label>
-  <div class="row">
-    <input id="heroHitH" type="range" min="1" max="100" step="1">
-    <output id="heroHitHOut"></output>
-  </div>
-
-  <label>Héros — décalage Y</label>
-  <div class="row">
-    <input id="heroHitYOffset" type="range" min="-100" max="100" step="1">
-    <output id="heroHitYOffsetOut"></output>
-  </div>
-
-  <label>Voitures — largeur</label>
-  <div class="row">
-    <input id="carHitW" type="range" min="10" max="150" step="1">
-    <output id="carHitWOut"></output>
-  </div>
-
-  <label>Voitures — hauteur</label>
-  <div class="row">
-    <input id="carHitH" type="range" min="10" max="150" step="1">
-    <output id="carHitHOut"></output>
-  </div>
-
-  <div style="margin-top:10px;font-size:12px;opacity:.85">
-    Magenta = héros · Cyan = voitures
-  </div>
+  <h3 style="margin-top:14px">Voitures</h3>
+  <div id="laneControls"></div>
 </div>
 <script>
 const CONFIG = {
@@ -136,7 +103,7 @@ heroHitboxOffsetY: 21,
 carHitboxScaleX: 100,
 carHitboxScaleY: 100,
 // Affiche les rectangles de collision.
-debugHitboxes: true,
+debugHitboxes: false,
 };
 function bindPlayerRange(id, key, suffix=' px') {
   const el = document.getElementById(id);
@@ -152,23 +119,65 @@ function bindPlayerRange(id, key, suffix=' px') {
 
 bindPlayerRange('moveStepY', 'moveStepY');
 
-function bindCollisionRange(id, key) {
-  const el = document.getElementById(id);
-  const out = document.getElementById(id + 'Out');
-  el.value = CONFIG[key];
-  const sync = () => {
-    CONFIG[key] = Number(el.value);
-    out.textContent = CONFIG[key] + (key === 'heroHitboxOffsetY' ? ' px' : ' %');
-  };
-  el.addEventListener('input', sync);
-  sync();
-}
+const laneControls = document.getElementById('laneControls');
+CONFIG.lanes.forEach((lane, i) => {
+  const block = document.createElement('div');
+  block.style.marginBottom = '12px';
+  block.style.paddingBottom = '10px';
+  block.style.borderBottom = '1px solid rgba(255,255,255,.18)';
 
-bindCollisionRange('heroHitW', 'heroHitboxScaleX');
-bindCollisionRange('heroHitH', 'heroHitboxScaleY');
-bindCollisionRange('heroHitYOffset', 'heroHitboxOffsetY');
-bindCollisionRange('carHitW', 'carHitboxScaleX');
-bindCollisionRange('carHitH', 'carHitboxScaleY');
+  const title = document.createElement('div');
+  title.textContent = 'Ligne ' + (i + 1);
+  title.style.fontWeight = '700';
+  title.style.marginBottom = '4px';
+  block.appendChild(title);
+
+  const speedLabel = document.createElement('label');
+  speedLabel.textContent = 'Vitesse';
+  block.appendChild(speedLabel);
+
+  const speedRow = document.createElement('div');
+  speedRow.className = 'row';
+  const speed = document.createElement('input');
+  speed.type = 'range';
+  speed.min = '50';
+  speed.max = '700';
+  speed.step = '5';
+  speed.value = lane.speedPxPerSec;
+  const speedOut = document.createElement('output');
+  const syncSpeed = () => {
+    lane.speedPxPerSec = Number(speed.value);
+    speedOut.textContent = lane.speedPxPerSec + ' px/s';
+  };
+  speed.addEventListener('input', syncSpeed);
+  speedRow.append(speed, speedOut);
+  block.appendChild(speedRow);
+  syncSpeed();
+
+  const freqLabel = document.createElement('label');
+  freqLabel.textContent = 'Intervalle spawn';
+  block.appendChild(freqLabel);
+
+  const freqRow = document.createElement('div');
+  freqRow.className = 'row';
+  const freq = document.createElement('input');
+  freq.type = 'range';
+  freq.min = '500';
+  freq.max = '10000';
+  freq.step = '100';
+  freq.value = lane.spawnEveryMs;
+  const freqOut = document.createElement('output');
+  const syncFreq = () => {
+    lane.spawnEveryMs = Number(freq.value);
+    freqOut.textContent = (lane.spawnEveryMs / 1000).toFixed(1) + ' s';
+  };
+  freq.addEventListener('input', syncFreq);
+  freqRow.append(freq, freqOut);
+  block.appendChild(freqRow);
+  syncFreq();
+
+  laneControls.appendChild(block);
+});
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -276,7 +285,7 @@ scaleX = lerp(1, a.scaleX, e);
 scaleY = lerp(1, a.scaleY, e);
 } else if (this.finished) {
 const a = CONFIG.winAnimation;
-const t = clamp((now - this.winStart) / a.jumpDurationMs, 0, 1);
+const t = ((now - this.winStart) % a.jumpDurationMs) / a.jumpDurationMs;
 if (t < 0.5) offsetY = -a.jumpHeightPx * easeOutQuad(t * 2);
 else offsetY = -a.jumpHeightPx * (1 - easeInQuad((t - 0.5) * 2));
 }
