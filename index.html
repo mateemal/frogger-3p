@@ -251,8 +251,8 @@ hitbox() {
 const iw = this.img.width, ih = this.img.height;
 const baseW = iw*(HERO_HIT.x1-HERO_HIT.x0);
 const baseH = ih*(HERO_HIT.y1-HERO_HIT.y0);
-const w = baseW / 4;
-const h = baseH / 4;
+const w = baseW / 32;
+const h = baseH / 32;
 const centerX = this.x - iw/2 + iw*(HERO_HIT.x0 + HERO_HIT.x1)/2;
 const centerY = this.y - ih/2 + ih*(HERO_HIT.y0 + HERO_HIT.y1)/2;
 return {
